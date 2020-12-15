@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import norm
 
 def synthesize_crosscurve(sample_nums=2000, z_list=None):
     u = lambda z: np.pi*(0.6+1.8*norm.cdf(z))

@@ -170,26 +170,26 @@ def visualize_VAE(vae_instance,
     ax.set_title('VAE Generative data with {}'.format(mode), fontsize=20)
     plt.show()
 
-def visualize_pdf(data, lim=1, c_map="magma"):
-    kde = gaussian_kde(x_train.T)
+def visualize_pdf(data, lim=1, c_map="magma_r"):
+    kde = gaussian_kde(data.T)
 
     # evaluate on a regular grid
-    xgrid = np.linspace(-2, 2, 60)
-    ygrid = np.linspace(-2, 2, 60)
+    xgrid = np.linspace(-lim, lim, 60)
+    ygrid = np.linspace(-lim, lim, 60)
     Xgrid, Ygrid = np.meshgrid(xgrid, ygrid)
     Z = kde.evaluate(np.vstack([Xgrid.ravel(), Ygrid.ravel()]))
 
     plt.figure(figsize=(5,4))
     plt.imshow(Z.reshape(Xgrid.shape),
                origin='lower', aspect='auto',
-               extent=[-1, 1, -1, 1],
+               extent=[-lim, lim, -lim, lim],
                cmap=c_map)
     plt.xlabel('x1')
     plt.ylabel('x2')
     cb = plt.colorbar()
     cb.set_label("density")
 
-def compare_VAE(elbo_vae, tvo_vae, x_train, number_samples=2000, x_var=0.01, lim=2, c_map="magma"):
+def compare_VAE(elbo_vae, tvo_vae, x_train, number_samples=2000, x_var=0.01, lim=2, c_map="magma_r"):
 
     kde = gaussian_kde(x_train.T)
     
