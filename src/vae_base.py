@@ -285,4 +285,4 @@ class VAE:
                                                            log_q, 
                                                            partition, 
                                                            num_particles,
-                                                           integration)å
+                                                           integration)
