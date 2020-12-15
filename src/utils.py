@@ -170,7 +170,26 @@ def visualize_VAE(vae_instance,
     ax.set_title('VAE Generative data with {}'.format(mode), fontsize=20)
     plt.show()
 
-def compare_VAE(elbo_vae, tvo_vae, x_train, number_samples=2000, x_var=0.01, lim=2):
+def visualize_pdf(data, lim=1, c_map="magma"):
+    kde = gaussian_kde(x_train.T)
+
+    # evaluate on a regular grid
+    xgrid = np.linspace(-2, 2, 60)
+    ygrid = np.linspace(-2, 2, 60)
+    Xgrid, Ygrid = np.meshgrid(xgrid, ygrid)
+    Z = kde.evaluate(np.vstack([Xgrid.ravel(), Ygrid.ravel()]))
+
+    plt.figure(figsize=(5,4))
+    plt.imshow(Z.reshape(Xgrid.shape),
+               origin='lower', aspect='auto',
+               extent=[-1, 1, -1, 1],
+               cmap=c_map)
+    plt.xlabel('x1')
+    plt.ylabel('x2')
+    cb = plt.colorbar()
+    cb.set_label("density")
+
+def compare_VAE(elbo_vae, tvo_vae, x_train, number_samples=2000, x_var=0.01, lim=2, c_map="magma"):
 
     kde = gaussian_kde(x_train.T)
     
@@ -194,7 +213,7 @@ def compare_VAE(elbo_vae, tvo_vae, x_train, number_samples=2000, x_var=0.01, lim
     im=ax[0].imshow(Z.reshape(Xgrid.shape),
                origin='lower', aspect='auto',
                extent=[-lim, lim, -lim, lim],
-               cmap='Blues')
+               cmap=c_map)
     ax[0].set_xlabel('x1')
     ax[0].set_ylabel('x2')
     ax[0].set_title('data')
@@ -203,7 +222,7 @@ def compare_VAE(elbo_vae, tvo_vae, x_train, number_samples=2000, x_var=0.01, lim
     im=ax[1].imshow(Z_elbo.reshape(Xgrid.shape),
                origin='lower', aspect='auto',
                extent=[-lim, lim, -lim, lim],
-               cmap='Blues')
+               cmap=c_map)
     ax[1].set_xlabel('x1')
     ax[1].set_ylabel('x2')
     ax[1].set_title('elbo')
@@ -212,7 +231,7 @@ def compare_VAE(elbo_vae, tvo_vae, x_train, number_samples=2000, x_var=0.01, lim
     im=ax[2].imshow(Z_tvo.reshape(Xgrid.shape),
                origin='lower', aspect='auto',
                extent=[-lim, lim, -lim, lim],
-               cmap='Blues')
+               cmap=c_map)
     ax[2].set_xlabel('x1')
     ax[2].set_ylabel('x2')
     ax[2].set_title('tvo')
