@@ -179,6 +179,7 @@ class VAE:
             self.encoder=self.encoder.cuda()
             self.decoder=self.decoder.cuda()
         self.objective_trace = []
+        self.llkhd_KL_trace = []
     
     def generate(self, N=300):
         """On CPU, use the generative model to generate x given zs sampled from the prior
@@ -199,6 +200,45 @@ class VAE:
         parameterized_std = z_params[:,self.z_dim:]
         std = torch.exp(parameterized_std) # To keep the std positive
         return mean, std
+
+    def llkhd_KL(self, x_train, S, device = 'cpu'):
+        '''Output Log Likelihood and KL divergence, fro trace plot'''
+        assert len(x_train.shape) == 2
+        assert x_train.shape[1] == self.x_dim
+        if S is not None:
+            self.S = S
+        N = x_train.shape[0] #sample numbers
+        
+        #infer zs with encoder 
+        mean, std = self.infer(x_train)
+        assert std.shape == (N, self.z_dim)
+        assert mean.shape == (N, self.z_dim)
+        
+        #sample zs with the parameters
+        if device == 'cuda': z_samples = torch.normal(0,1,size=(self.S, N, self.z_dim)).cuda() * std + mean
+        if device == 'cpu': z_samples = torch.normal(0,1,size=(self.S, N, self.z_dim)) * std + mean
+        assert z_samples.shape == (self.S, N, self.z_dim)
+        
+        #predict xs
+        x = self.decoder.forward(z_samples)
+        assert x.shape == (self.S, N, self.x_dim)
+        
+        #evaluate log_likelihood p(y_n)
+        norm1 = torch.distributions.Normal(x, self.x_var**0.5)
+        log_likelihood = torch.sum(norm1.log_prob(x_train), axis=-1)
+        assert log_likelihood.shape == (self.S, N)
+        
+        #evaluate sampled zs under prior 
+        norm2 = torch.distributions.Normal(0.0, 1.0)
+        log_pz = torch.sum(norm2.log_prob(z_samples), axis=-1)
+        assert log_pz.shape == (self.S, N)
+        
+        #evaluate sampled z's under variational distribution
+        norm3 = torch.distributions.Normal(mean, std)
+        log_qz_given_x = torch.sum(norm3.log_prob(z_samples), axis=-1)
+
+        return [torch.mean(log_likelihood).item(), torch.mean(log_qz_given_x - log_pz).item()]
+
     
     def make_elbo_objective(self, x_train, S, device = 'cpu'):
         '''Make ELBO objective function'''
@@ -262,17 +302,17 @@ class VAE:
         x = self.decoder.forward(z_samples)
         assert x.shape == (self.S, N, self.x_dim)
         
-        #evaluate log_likelihood p(y_n)
+        #evaluate log_likelihood log p_w(y_n)
         norm1 = torch.distributions.Normal(x, self.x_var**0.5)
         log_likelihood = torch.sum(norm1.log_prob(x_train), axis=-1)
         assert log_likelihood.shape == (self.S, N)
         
-        #evaluate sampled zs under prior 
+        #evaluate sampled zs under prior log q_v(z_n)
         norm2 = torch.distributions.Normal(0.0, 1.0)
         log_pz = torch.sum(norm2.log_prob(z_samples), axis=-1)
         assert log_pz.shape == (self.S, N)
         
-        #evaluate sampled z's under variational distribution
+        #evaluate sampled z's under variational distribution, p_w( zn | yn )
         norm3 = torch.distributions.Normal(mean, std)
         log_qz_given_x = torch.sum(norm3.log_prob(z_samples), axis=-1)
         
