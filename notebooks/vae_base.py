@@ -180,12 +180,12 @@ class VAE:
             self.decoder=self.decoder.cuda()
         self.objective_trace = []
     
-    def generate(self, N=300):
+    def generate(self, N=300, z_samples=None):
         """On CPU, use the generative model to generate x given zs sampled from the prior
         Returns: Synthetic observation points Pytorch Tensor with shape (N, x_dim)"""
-        z_samples = torch.normal(0, 1, size=(N,self.z_dim))
+        if z_samples is None: z_samples = torch.normal(0, 1, size=(N,self.z_dim))
         decodercpu = self.decoder.cpu()
-        return decodercpu.forward(z_samples)
+        return decodercpu.forward(z_samples) 
     
     def infer(self, x):
         """Use the encoder to infer mean and sigma of q(z|x)
