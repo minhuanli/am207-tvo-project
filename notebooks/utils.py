@@ -83,6 +83,7 @@ def train_ELBO_VAE_batched(x_train,
             counter=counter+1
             if counter % report_iter == 0:
                 vae_instance.objective_trace.append(loss.item())
+                vae_instance.llkhd_KL_trace.append(vae_instance.llkhd_KL())
     return vae_instance
 
 def train_ELBO_LIN_VAE_batched(x_train,
@@ -136,6 +137,7 @@ def train_ELBO_LIN_VAE_batched(x_train,
             counter=counter+1
             if counter % report_iter == 0:
                 vae_instance.objective_trace.append(loss.item())
+                vae_instance.llkhd_KL_trace.append(vae_instance.llkhd_KL())
             if aggressive_flag and counter % batch_num == 0:
                 cur_mi = calc_mi(vae_instance, x_valT)
                 if cur_mi - best_mi < 0:
@@ -182,6 +184,7 @@ def train_TVO_VAE_batched(x_train,
             counter=counter+1
             if counter % report_iter == 0:
                 vae_instance.objective_trace.append(loss.item())
+                vae_instance.llkhd_KL_trace.append(vae_instance.llkhd_KL())
     return vae_instance
 
 def train_TVO_LIN_VAE_batched(x_train,
@@ -236,6 +239,7 @@ def train_TVO_LIN_VAE_batched(x_train,
             counter=counter+1
             if counter % report_iter == 0:
                 vae_instance.objective_trace.append(loss.item())
+                vae_instance.llkhd_KL_trace.append(vae_instance.llkhd_KL())
             if aggressive_flag and counter % batch_num == 0:
                 cur_mi = calc_mi(vae_instance, x_valT)
                 if cur_mi - best_mi < 0:
