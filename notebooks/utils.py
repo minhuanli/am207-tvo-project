@@ -139,7 +139,7 @@ def train_ELBO_LIN_VAE_batched(x_train,
                 vae_instance.objective_trace.append(loss.item())
                 vae_instance.llkhd_KL_trace.append(vae_instance.llkhd_KL())
             if aggressive_flag and counter % batch_num == 0:
-                cur_mi = calc_mi(vae_instance, x_valT)
+                cur_mi = calc_mi(vae_instance, x_valT, device=device)
                 if cur_mi - best_mi < 0:
                     mi_not_improved += 1
                     if mi_not_improved == 5:
@@ -241,7 +241,7 @@ def train_TVO_LIN_VAE_batched(x_train,
                 vae_instance.objective_trace.append(loss.item())
                 vae_instance.llkhd_KL_trace.append(vae_instance.llkhd_KL())
             if aggressive_flag and counter % batch_num == 0:
-                cur_mi = calc_mi(vae_instance, x_valT)
+                cur_mi = calc_mi(vae_instance, x_valT, device=device)
                 if cur_mi - best_mi < 0:
                     mi_not_improved += 1
                     if mi_not_improved == 5:
