@@ -8,6 +8,10 @@ from vae_base import *
 from scipy.stats import norm, gaussian_kde
 from tqdm import tqdm
 
+import data
+import matplotlib as mpl
+from mpl_toolkits.mplot3d import Axes3D
+
 def train_ELBO_VAE_batched(x_train, 
                    x_var = 0.01,
                    z_dim = 1,
@@ -236,4 +240,21 @@ def compare_VAE(elbo_vae, tvo_vae, x_train, number_samples=2000, x_var=0.01, lim
     ax[2].set_ylabel('x2')
     ax[2].set_title('tvo')
     fig.colorbar(im, ax=ax[2])
+    plt.show()
+    
+def compare_VAE_true_function(elbo_vae, tvo_vae, z_dim, number_samples, z_samples, z_samples_np, task='crosscurve'):
+    z_samples=z_samples.reshape(-1,z_dim)
+    x_elbo=elbo_vae.generate(z_samples=z_samples).detach().cpu()
+    x_tvo=tvo_vae.generate(z_samples=z_samples).detach().cpu()
+    if task == 'crosscurve': x_true=data.synthesize_crosscurve(number_samples, z_list=z_samples_np, noise_var=0)
+    if task == 'threeclusters': x_true=data.synthesize_threeclusters(number_samples, z_list=z_samples_np, noise_var=0)
+    fig=plt.figure()
+    ax=fig.gca(projection='3d')
+    ax.plot(x_true[:,0].reshape(-1,1), x_true[:,1].reshape(-1,1), z_samples_np, color = 'black', label='true f_theta(z)')
+    ax.plot(x_elbo[:,0].flatten(), x_elbo[:,1].flatten(), z_samples.flatten(), color = 'blue', label='learned f_theta(z)-elbo')
+    ax.plot(x_tvo[:,0].flatten(), x_tvo[:,1].flatten(), z_samples.flatten(), color = 'red', label='learned f_theta(z)-tvo')
+    ax.legend()
+    ax.set_xlabel('x1')
+    ax.set_ylabel('x2')
+    ax.set_zlabel('z')
     plt.show()
