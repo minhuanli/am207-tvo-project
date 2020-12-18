@@ -1,12 +1,57 @@
 
 import torch
-
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 
 from vae_base import *
 from scipy.stats import norm, gaussian_kde
 from tqdm import tqdm
+
+def calc_mi(vae, x_validation, device='cpu', S=1):
+    '''Approximate the mutual information between x and z
+    I(x, z) = E_xE_{q(z|x)}log(q(z|x)) - E_xE_{q(z|x)}log(q(z))
+    Modified from the implementation by Author of the paper "LAGGING INFERENCE NETWORKS 
+    AND POSTERIOR COLLAPSE IN VARIATIONAL AUTOENCODERS"
+    see https://github.com/jxhe/vae-lagging-encoder/blob/master/modules/encoders/encoder.py
+    
+    This function will calculate the mutual information during the training with LIN trick,
+    as a criterion wehther we should stop the agressive training. 
+    
+    Parameters:
+    -----------
+    vae: A vae instance, with .infer() method
+    
+    x_validation: Validation X data set
+    
+    Returns: Float
+    '''
+    N_batch = x_validation.shape[0]
+    
+    #infer zs with encoder 
+    # 2D Tensor, shape [N_batch, z_dim]
+    mean, std = vae.infer(x_validation)
+    assert std.shape == (N_batch, vae.z_dim)
+    assert mean.shape == (N_batch, vae.z_dim)
+    
+    ## Term 1: calculate Negative Entropy, E_{q(z|x)}log(q(z|x))
+    # E_{q(z|x)}log(q(z|x)) = -0.5* z_dim *log(2*\pi) - 0.5*(1+log(std**2)).sum(-1)
+    # 1D Tensor, shape [N_batch]
+    neg_entropy = (-0.5 * vae.z_dim * math.log(2. * math.pi)- 0.5 * (1 + torch.log(std**2)).sum(-1))
+    
+    
+    ## Term 2: calculate E_{q(z|x)}log(q(z))
+    #sample zs with the parameters
+    if device == 'cuda': z_samples = torch.normal(0,1,size=(S, N_batch, vae.z_dim)).cuda() * std + mean
+    if device == 'cpu': z_samples = torch.normal(0,1,size=(S, N_batch, vae.z_dim)) * std + mean
+    assert z_samples.shape == (S, N_batch, vae.z_dim)
+    
+    #evaluate sampled z's under variational distribution
+    # 2D Tensor, shape [S, N_batch]
+    norm1 = torch.distributions.Normal(mean, std)
+    log_qz= torch.sum(norm1.log_prob(z_samples), axis=-1)
+    
+    return (torch.mean(neg_entropy) - torch.mean(log_qz)).item()
 
 def train_ELBO_VAE_batched(x_train, 
                    x_var = 0.01,
@@ -38,6 +83,70 @@ def train_ELBO_VAE_batched(x_train,
             counter=counter+1
             if counter % report_iter == 0:
                 vae_instance.objective_trace.append(loss.item())
+    return vae_instance
+
+def train_ELBO_LIN_VAE_batched(x_train,
+                   x_val,
+                   x_var = 0.01,
+                   z_dim = 1,
+                   width = 50,
+                   hidden_layers = 1, 
+                   learning_rate = 0.01,
+                   S = 10,
+                   n_epochs = 5000, 
+                   report_iter = 50, 
+                   batch_size = 256,
+                   device = 'cpu'):
+    x_dim = x_train.shape[1]
+    if device == 'cuda': 
+        x_trainT = torch.tensor(x_train).float().cuda()
+        x_valT = torch.tensor(x_val).float().cuda()
+    if device == 'cpu': 
+        x_trainT = torch.tensor(x_train).float()
+        x_valT = torch.tensor(x_val).float()
+    batch_num = int(x_train.shape[0]/batch_size)
+    vae_instance = VAE(x_dim, z_dim, x_var, hidden_layers, width, hidden_layers, width)
+    enc_optimizer = torch.optim.Adam(vae_instance.encoder.parameters(), lr=learning_rate)
+    dec_optimizer = torch.optim.Adam(vae_instance.decoder.parameters(), lr=learning_rate)
+    counter = 0
+    pre_mi = 0
+    best_mi = 0
+    mi_not_improved = 0
+    aggressive_flag = True
+    for epoch in tqdm(range(n_epochs)):
+        x_trainT=x_trainT[torch.randperm(x_trainT.size()[0])]
+        for i in range(batch_num):
+            x_batch = x_trainT[i*batch_size:(i+1)*batch_size,:]
+            sub_iter=0
+            while aggressive_flag and sub_iter < 100:
+                enc_optimizer.zero_grad()
+                dec_optimizer.zero_grad()
+                loss = vae_instance.make_elbo_objective(x_batch, S)
+                loss.backward()
+                enc_optimizer.step()
+                sub_iter += 1
+                
+            enc_optimizer.zero_grad()
+            dec_optimizer.zero_grad()
+            loss = vae_instance.make_elbo_objective(x_batch, S)
+            loss.backward()
+            if not aggressive_flag:
+                enc_optimizer.step()
+            dec_optimizer.step()
+            counter=counter+1
+            if counter % report_iter == 0:
+                vae_instance.objective_trace.append(loss.item())
+            if aggressive_flag and counter % batch_num == 0:
+                cur_mi = calc_mi(vae_instance, x_valT)
+                if cur_mi - best_mi < 0:
+                    mi_not_improved += 1
+                    if mi_not_improved == 5:
+                        print("At iteration {} aggresive_flag is set to False".format(counter))
+                        aggressive_flag = False
+                else:
+                    best_mi = cur_mi
+                pre_mi = cur_mi
+
     return vae_instance
 
 def train_TVO_VAE_batched(x_train, 
@@ -73,6 +182,71 @@ def train_TVO_VAE_batched(x_train,
             counter=counter+1
             if counter % report_iter == 0:
                 vae_instance.objective_trace.append(loss.item())
+    return vae_instance
+
+def train_TVO_LIN_VAE_batched(x_train,
+                   x_val,
+                   x_var = 0.01,
+                   z_dim = 1,
+                   width = 50,
+                   hidden_layers = 1, 
+                   learning_rate = 0.01,
+                   partition = torch.tensor([0,0.25,0.5,0.75,1.]),
+                   S = 10,
+                   n_epochs = 5000, 
+                   report_iter = 50, 
+                   batch_size = 256,
+                   device = 'cpu'):
+    x_dim = x_train.shape[1]
+    if device == 'cuda': 
+        x_trainT = torch.tensor(x_train).float().cuda()
+        x_valT = torch.tensor(x_val).float().cuda()
+    if device == 'cpu': 
+        x_trainT = torch.tensor(x_train).float()
+        x_valT = torch.tensor(x_val).float()
+    batch_num = int(x_train.shape[0]/batch_size)
+    vae_instance = VAE(x_dim, z_dim, x_var, hidden_layers, width, hidden_layers, width)
+    enc_optimizer = torch.optim.Adam(vae_instance.encoder.parameters(), lr=learning_rate)
+    dec_optimizer = torch.optim.Adam(vae_instance.decoder.parameters(), lr=learning_rate)
+    counter = 0
+    pre_mi = 0
+    best_mi = 0
+    mi_not_improved = 0
+    aggressive_flag = True
+    for epoch in tqdm(range(n_epochs)):
+        x_trainT=x_trainT[torch.randperm(x_trainT.size()[0])]
+        for i in range(batch_num):
+            x_batch = x_trainT[i*batch_size:(i+1)*batch_size,:]
+            sub_iter=0
+            while aggressive_flag and sub_iter < 100:
+                enc_optimizer.zero_grad()
+                dec_optimizer.zero_grad()
+                loss = vae_instance.make_tvo_objective(x_batch, S, partition)
+                loss.backward()
+                enc_optimizer.step()
+                sub_iter += 1
+                
+            enc_optimizer.zero_grad()
+            dec_optimizer.zero_grad()
+            loss = vae_instance.make_tvo_objective(x_batch, S, partition)
+            loss.backward()
+            if not aggressive_flag:
+                enc_optimizer.step()
+            dec_optimizer.step()
+            counter=counter+1
+            if counter % report_iter == 0:
+                vae_instance.objective_trace.append(loss.item())
+            if aggressive_flag and counter % batch_num == 0:
+                cur_mi = calc_mi(vae_instance, x_valT)
+                if cur_mi - best_mi < 0:
+                    mi_not_improved += 1
+                    if mi_not_improved == 5:
+                        print("At iteration {} aggresive_flag is set to False".format(counter))
+                        aggressive_flag = False
+                else:
+                    best_mi = cur_mi
+                pre_mi = cur_mi
+
     return vae_instance
 
 def random_start_ELBO_VAE(x_train, 
