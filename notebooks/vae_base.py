@@ -262,17 +262,17 @@ class VAE:
         x = self.decoder.forward(z_samples)
         assert x.shape == (self.S, N, self.x_dim)
         
-        #evaluate log_likelihood p(y_n)
+        #evaluate log_likelihood p_w(y_n)
         norm1 = torch.distributions.Normal(x, self.x_var**0.5)
         log_likelihood = torch.sum(norm1.log_prob(x_train), axis=-1)
         assert log_likelihood.shape == (self.S, N)
         
-        #evaluate sampled zs under prior 
+        #evaluate sampled zs under prior q_v(z_n)
         norm2 = torch.distributions.Normal(0.0, 1.0)
         log_pz = torch.sum(norm2.log_prob(z_samples), axis=-1)
         assert log_pz.shape == (self.S, N)
         
-        #evaluate sampled z's under variational distribution
+        #evaluate sampled z's under variational distribution, p_w( zn | yn )
         norm3 = torch.distributions.Normal(mean, std)
         log_qz_given_x = torch.sum(norm3.log_prob(z_samples), axis=-1)
         
