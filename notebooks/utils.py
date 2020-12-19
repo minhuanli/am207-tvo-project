@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from vae_base import *
-from scipy.stats import norm, gaussian_kde
+from scipy.stats import norm, gaussian_kde, multivariate_normal
 from tqdm import tqdm
 
 def calc_mi(vae, x_validation, device='cpu', S=1):
@@ -415,3 +415,88 @@ def compare_VAE(elbo_vae, tvo_vae, x_train, number_samples=2000, x_var=0.01, lim
     ax[2].set_title('tvo')
     fig.colorbar(im, ax=ax[2])
     plt.show()
+
+def true_posterior(x_value, x_var, f_true, z_list=np.linspace(-3,3,500)):
+    '''
+    This function outputs Posterior p(z|x) under True f_{theta}(z) 
+    evaluated at the z_list points
+
+    Parameters
+    ----------
+    x_value: numpy array or list, shape [2,]
+        The x point which conditioned on. For example, x_val=[0.2,0.2]
+
+    x_var: float
+        variance of the gaussian distribution in x space
+
+    f_true: function, should have one argument, output a shape (2,) array/list
+        The true funtion that transfer z to x_mean = f(z)
+
+    z_list: a list of z points you want to evaluate the posterior
+
+    Returns
+    -------
+    p(z|x), a list of values, same length as z_list
+
+    '''
+    posterior_list=[]
+    assert np.array(x_value).shape == (2,)
+
+    for z in z_list:
+        x_mean = f_true(z)
+        p_x_z = multivariate_normal.pdf(x_value, mean=x_mean, cov=x_var)
+        p_z = norm.pdf(z, loc=0., scale=1.)
+        p_z_x_unnormalized = p_x_z * p_z 
+
+        posterior_list.append(p_z_x_unnormalized)
+
+    posterior_list = np.array(posterior_list)
+
+    # You can use an MC estimates instead for the normalizer, i am lazy here
+    bin_size = (z_list[-1] - z_list[0])/len(z_list)
+    normalizer = np.sum(posterior_list)*bin_size
+
+    return posterior_list/normalizer
+
+def trained_posterior(x_value, x_var, vae_instance, z_list=np.linspace(-3,3,500)):
+    '''
+    This function outputs Posterior p(z|x) under True f_{theta}(z) 
+    evaluated at the z_list points
+
+    Parameters
+    ----------
+    x_value: numpy array or list, shape [2,]
+        The x point which conditioned on. For example, x_val=[0.2,0.2]
+
+    x_var: float
+        variance of the gaussian distribution in x space
+
+    f_true: function, should have one argument, output a shape (2,) array/list
+        The true funtion that transfer z to x_mean = f(z)
+
+    z_list: a list of z points you want to evaluate the posterior
+
+    Returns
+    -------
+    p(z|x), a list of values, same length as z_list
+
+    '''
+    posterior_list=[]
+    assert np.array(x_value).shape == (2,)
+
+    for z in z_list:
+        x_mean = vae_instance.decoder.forward(z).item()
+        p_x_z = multivariate_normal.pdf(x_value, mean=x_mean, cov=x_var)
+        p_z = norm.pdf(z, loc=0., scale=1.)
+        p_z_x_unnormalized = p_x_z * p_z 
+
+        posterior_list.append(p_z_x_unnormalized)
+
+    posterior_list = np.array(posterior_list)
+
+    # You can use an MC estimates instead for the normalizer, i am lazy here
+    bin_size = (z_list[-1] - z_list[0])/len(z_list)
+    normalizer = np.sum(posterior_list)*bin_size
+
+    return posterior_list/normalizer
+    
